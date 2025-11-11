@@ -7,6 +7,7 @@ import {
   getNGOStats,
 } from "../controllers/profileController.js";
 import { protect } from "../middleware/authMiddleware.js";
+import upload from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ router.get("/:id", getPublicProfile);
 
 // Protected routes
 router.put("/", protect, updateProfile);
-router.put("/image", protect, updateProfileImage);
+router.put("/image", protect, upload.single("profileImage"), updateProfileImage);
 router.get("/stats/volunteer", protect, getVolunteerStats);
 router.get("/stats/ngo", protect, getNGOStats);
 

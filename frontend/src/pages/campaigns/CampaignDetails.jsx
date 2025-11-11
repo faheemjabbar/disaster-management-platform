@@ -1,60 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { MapPin, Calendar, Users, Clock, Share2, Heart, AlertCircle, CheckCircle, Phone, Mail, Globe } from 'lucide-react';
+import { AuthContext } from '../../context/AuthContext';
+import { api } from '../../utils/apiEndpoints';
+import LoadingSpinner from '../../components/LoadingSpinner';
+import toast from 'react-hot-toast';
 
 const CampaignDetails = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
+  
+  const [campaign, setCampaign] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [isApplied, setIsApplied] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState(null);
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const [applying, setApplying] = useState(false);
 
-  // Sample campaign data
-  const campaign = {
-    id: 1,
-    title: "Emergency Flood Relief in Sindh",
-    ngoName: "Pakistan Red Crescent",
-    ngoLogo: "https://via.placeholder.com/100",
-    location: "Dadu, Sindh, Pakistan",
-    coordinates: { lat: 26.7312, lng: 67.7829 },
-    disasterType: "Flood",
-    urgency: "critical",
-    volunteersNeeded: 50,
-    volunteersJoined: 32,
-    startDate: "2025-01-15",
-    endDate: "2025-02-28",
-    description: "Severe flooding has displaced thousands of families in Dadu district. We urgently need volunteers to help distribute food, water, medical supplies, and set up temporary shelters.",
-    detailedDescription: `The recent monsoon rains have caused devastating floods affecting over 50,000 people. Many families have lost their homes and urgently need assistance. 
+  useEffect(() => {
+    if (id) {
+      fetchCampaignDetails();
+    }
+  }, [id]);
 
-Our relief operations include:
-• Setting up temporary shelters
-• Distributing food packets and clean water
-• Providing emergency medical care
-• Supporting children and elderly evacuees
-• Coordinating with local authorities
-
-We need dedicated volunteers who can commit to at least 2 weeks of service. Training will be provided on-site.`,
-    categories: ["Medical Aid", "Food Distribution", "Shelter Setup", "Child Care"],
-    image: "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=1200",
-    requirements: [
-      "Age 18+ (exceptions for accompanied minors)",
-      "Good physical health",
-      "Willingness to work in challenging conditions",
-      "Team player with compassionate attitude"
-    ],
-    skillsNeeded: [
-      "Medical professionals (doctors, nurses, paramedics)",
-      "Engineers (civil, electrical)",
-      "Logistics and supply chain coordinators",
-      "Social workers and counselors",
-      "General volunteers for distribution"
-    ],
-    contact: {
-      phone: "+92 300 1234567",
-      email: "relief@redcrescent.pk",
-      website: "www.redcrescent.pk"
-    },
-    timeline: [
-      { date: "Week 1", task: "Emergency food & water distribution" },
-      { date: "Week 2-3", task: "Medical camps and shelter setup" },
-      { date: "Week 4-6", task: "Rehabilitation and recovery support" }
-    ]
+  const fetchCampaignDetails = async () => {
+    try {
+      setLoading(true);
+      const data = await api.campaigns.getById(id);
+      setCampaign(data);
+      
+      // Check if user already applied
+      if (user && data.volunteers) {
+        const userApplication = data.volunteers.find(
+          v => v.volunteer?._id === user._id || v.volunteer === user._id
+        );
+        if (userApplication) {
+          setIsApplied(true);
+          setApplicationStatus(userApplication.status);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch campaign:", err);
+      toast.error("Failed to load campaign details");
+      setTimeout(() => navigate("/campaigns"), 2000);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const urgencyColors = {
@@ -63,8 +55,6 @@ We need dedicated volunteers who can commit to at least 2 weeks of service. Trai
     medium: 'bg-yellow-500',
     low: 'bg-green-500'
   };
-
-  const progress = Math.round((campaign.volunteersJoined / campaign.volunteersNeeded) * 100);
 
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-US', { 
@@ -75,20 +65,65 @@ We need dedicated volunteers who can commit to at least 2 weeks of service. Trai
   };
 
   const handleApply = () => {
+    if (!user) {
+      toast.error("Please login to apply");
+      navigate("/");
+      return;
+    }
+    if (user.userType !== "volunteer") {
+      toast.error("Only volunteers can apply to campaigns");
+      return;
+    }
+    if (campaign.volunteersJoined >= campaign.volunteersNeeded) {
+      toast.error("This campaign is full");
+      return;
+    }
     setShowApplyModal(true);
   };
 
-  const handleConfirmApply = () => {
-    setIsApplied(true);
-    setShowApplyModal(false);
+  const handleConfirmApply = async () => {
+    try {
+      setApplying(true);
+      await api.campaigns.apply(id);
+      setIsApplied(true);
+      setApplicationStatus('pending');
+      setShowApplyModal(false);
+      toast.success("Application submitted successfully!");
+      // Refresh campaign data
+      fetchCampaignDetails();
+    } catch (err) {
+      toast.error(err.message || "Failed to submit application");
+    } finally {
+      setApplying(false);
+    }
   };
+
+  if (loading) return <LoadingSpinner fullScreen />;
+  
+  if (!campaign) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#FFF7E5] to-[#FFEFD0] flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Campaign Not Found</h2>
+          <button
+            onClick={() => navigate("/campaigns")}
+            className="bg-[#F68B84] text-white px-6 py-2 rounded-lg hover:bg-[#E27872]"
+          >
+            Back to Campaigns
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const progress = Math.round((campaign.volunteersJoined / campaign.volunteersNeeded) * 100);
 
   return (
     <div className="min-h-screen bg-linear-to-br from-[#FFF7E5] to-[#FFEFD0]">
       {/* Hero Section */}
       <div className="relative h-96 overflow-hidden">
         <img 
-          src={campaign.image} 
+          src={campaign.image || "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=1200"} 
           alt={campaign.title}
           className="w-full h-full object-cover"
         />
@@ -151,84 +186,43 @@ We need dedicated volunteers who can commit to at least 2 weeks of service. Trai
             {/* Description */}
             <div className="bg-white rounded-xl shadow-md p-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">About This Campaign</h2>
-              <p className="text-gray-700 mb-4">{campaign.description}</p>
-              <div className="whitespace-pre-line text-gray-700">{campaign.detailedDescription}</div>
+              <p className="text-gray-700 whitespace-pre-line">{campaign.description}</p>
             </div>
 
             {/* Categories */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Categories</h2>
-              <div className="flex flex-wrap gap-3">
-                {campaign.categories.map((cat, i) => (
-                  <span 
-                    key={i}
-                    className="px-4 py-2 bg-[#FFF7E5] text-[#E27872] rounded-lg font-medium"
-                  >
-                    {cat}
-                  </span>
-                ))}
+            {campaign.categories && campaign.categories.length > 0 && (
+              <div className="bg-white rounded-xl shadow-md p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Categories</h2>
+                <div className="flex flex-wrap gap-3">
+                  {campaign.categories.map((cat, i) => (
+                    <span 
+                      key={i}
+                      className="px-4 py-2 bg-[#FFF7E5] text-[#E27872] rounded-lg font-medium"
+                    >
+                      {cat}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-
-            {/* Requirements */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Requirements</h2>
-              <ul className="space-y-2">
-                {campaign.requirements.map((req, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-700">{req}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Skills Needed */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Skills Needed</h2>
-              <ul className="space-y-2">
-                {campaign.skillsNeeded.map((skill, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-[#F68B84] rounded-full mt-2 flex-shrink-0" />
-                    <span className="text-gray-700">{skill}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Timeline */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Campaign Timeline</h2>
-              <div className="space-y-4">
-                {campaign.timeline.map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className="w-3 h-3 bg-[#F68B84] rounded-full" />
-                      {i < campaign.timeline.length - 1 && (
-                        <div className="w-0.5 h-full bg-gray-300 mt-2" />
-                      )}
-                    </div>
-                    <div className="pb-6">
-                      <p className="font-bold text-[#E27872]">{item.date}</p>
-                      <p className="text-gray-700">{item.task}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+            )}
           </div>
 
           {/* Right Column - Sidebar */}
           <div className="space-y-6">
             
             {/* Apply Card */}
-            <div className="bg-white rounded-xl shadow-md p-6 top-6">
+            <div className="bg-white rounded-xl shadow-md p-6 sticky top-6">
               <div className="text-center mb-4">
                 <div className="w-20 h-20 mx-auto mb-3 rounded-full overflow-hidden border-4 border-[#F8D57E]">
-                  <img src={campaign.ngoLogo} alt={campaign.ngoName} className="w-full h-full object-cover" />
+                  <img 
+                    src={campaign.ngo?.profileImage || "https://via.placeholder.com/100"} 
+                    alt={campaign.ngo?.organizationName} 
+                    className="w-full h-full object-cover" 
+                  />
                 </div>
-                <h3 className="font-bold text-lg text-gray-900">{campaign.ngoName}</h3>
+                <h3 className="font-bold text-lg text-gray-900">
+                  {campaign.ngo?.organizationName || campaign.ngo?.fullName}
+                </h3>
               </div>
 
               {/* Progress Bar */}
@@ -252,14 +246,25 @@ We need dedicated volunteers who can commit to at least 2 weeks of service. Trai
               {!isApplied ? (
                 <button 
                   onClick={handleApply}
-                  className="w-full bg-[#F68B84] text-white font-semibold py-3 rounded-lg hover:bg-[#E27872] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] mb-3"
+                  disabled={campaign.volunteersJoined >= campaign.volunteersNeeded}
+                  className={`w-full font-semibold py-3 rounded-lg mb-3 transition-all ${
+                    campaign.volunteersJoined >= campaign.volunteersNeeded
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-[#F68B84] text-white hover:bg-[#E27872] hover:scale-[1.02] active:scale-[0.98]'
+                  }`}
                 >
-                  Apply to Volunteer
+                  {campaign.volunteersJoined >= campaign.volunteersNeeded ? 'Campaign Full' : 'Apply to Volunteer'}
                 </button>
               ) : (
-                <div className="bg-green-50 border-2 border-green-500 text-green-700 font-semibold py-3 rounded-lg text-center mb-3 flex items-center justify-center gap-2">
+                <div className={`border-2 font-semibold py-3 rounded-lg text-center mb-3 flex items-center justify-center gap-2 ${
+                  applicationStatus === 'approved' 
+                    ? 'bg-green-50 border-green-500 text-green-700'
+                    : applicationStatus === 'rejected'
+                    ? 'bg-red-50 border-red-500 text-red-700'
+                    : 'bg-yellow-50 border-yellow-500 text-yellow-700'
+                }`}>
                   <CheckCircle className="w-5 h-5" />
-                  Application Submitted
+                  Application {applicationStatus || 'Pending'}
                 </div>
               )}
 
@@ -281,28 +286,20 @@ We need dedicated volunteers who can commit to at least 2 weeks of service. Trai
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-gray-700">
                   <Phone className="w-5 h-5 text-[#F68B84]" />
-                  <span>{campaign.contact.phone}</span>
+                  <span>{campaign.ngo?.phone || 'Not provided'}</span>
                 </div>
                 <div className="flex items-center gap-3 text-gray-700">
                   <Mail className="w-5 h-5 text-[#F68B84]" />
-                  <span className="text-sm">{campaign.contact.email}</span>
+                  <span className="text-sm">{campaign.ngo?.email}</span>
                 </div>
-                <div className="flex items-center gap-3 text-gray-700">
-                  <Globe className="w-5 h-5 text-[#F68B84]" />
-                  <span className="text-sm">{campaign.contact.website}</span>
-                </div>
+                {campaign.ngo?.website && (
+                  <div className="flex items-center gap-3 text-gray-700">
+                    <Globe className="w-5 h-5 text-[#F68B84]" />
+                    <span className="text-sm">{campaign.ngo.website}</span>
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* Map Placeholder */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h3 className="font-bold text-lg text-gray-900 mb-4">Location</h3>
-              <div className="w-full h-48 bg-gray-200 rounded-lg flex items-center justify-center">
-                <MapPin className="w-12 h-12 text-gray-400" />
-              </div>
-              <p className="text-sm text-gray-600 mt-3 text-center">{campaign.location}</p>
-            </div>
-
           </div>
         </div>
       </div>
@@ -319,15 +316,17 @@ We need dedicated volunteers who can commit to at least 2 weeks of service. Trai
             <div className="flex gap-3">
               <button 
                 onClick={() => setShowApplyModal(false)}
-                className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-50 transition-all"
+                disabled={applying}
+                className="flex-1 border border-gray-300 text-gray-700 font-semibold py-2.5 rounded-lg hover:bg-gray-50 transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button 
                 onClick={handleConfirmApply}
-                className="flex-1 bg-[#F68B84] text-white font-semibold py-2.5 rounded-lg hover:bg-[#E27872] transition-all"
+                disabled={applying}
+                className="flex-1 bg-[#F68B84] text-white font-semibold py-2.5 rounded-lg hover:bg-[#E27872] transition-all disabled:opacity-50"
               >
-                Confirm
+                {applying ? 'Submitting...' : 'Confirm'}
               </button>
             </div>
           </div>

@@ -28,7 +28,8 @@ router.post("/:id/apply", protect, applyToCampaign);
 router.put("/:id/volunteers/:volunteerId", protect, manageApplication);
 
 // User-specific routes
+router.get("/", getCampaigns); // Get all campaigns
 router.get("/ngo/my-campaigns", protect, getMyCampaigns);
 router.get("/volunteer/my-applications", protect, getMyApplications);
-
+router.get("/:id", getCampaignById); // Get single campaign (MUST BE LAST)
 export default router;

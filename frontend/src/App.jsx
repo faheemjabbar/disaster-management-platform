@@ -16,6 +16,7 @@ import NGOProfile from "./pages/profiles/NGOProfile";
 import LoginModal from "./components/LoginModal";
 import RegisterModal from "./components/RegisterModal";
 import { AuthContext } from "./context/AuthContext";
+import Notifications from "./pages/communication/Notifications";
 
 function App() {
   const [showLogin, setShowLogin] = useState(false);
@@ -64,6 +65,7 @@ function App() {
         <Route path="/campaigns" element={<CampaignList />} />
         <Route path="/campaign/:id" element={<CampaignDetails />} />
         <Route path="/create-campaign" element={<CreateCampaign />} />
+        <Route path="/notifications" element={<Notifications />} />
         
         {/* Profile Routes */}
         <Route path="/volunteer" element={<VolunteerProfile />} />

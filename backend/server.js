@@ -26,6 +26,7 @@ app.use("/api/campaigns", campaignRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/uploads", express.static("uploads"));
 
 // Default route
 app.get("/", (req, res) => {

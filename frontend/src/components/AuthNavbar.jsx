@@ -3,12 +3,14 @@ import { Link, useNavigate } from "react-router-dom";
 import { assets } from "../assets/assets";
 import { AuthContext } from "../context/AuthContext";
 import { User, LogOut, Settings, Bell, Menu, X } from "lucide-react";
+import { useNotifications } from "../hooks/useNotifications";
 
 const AuthNavbar = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { unreadCount } = useNotifications();
 
   const handleLogout = () => {
     logout();
@@ -56,10 +58,18 @@ const AuthNavbar = () => {
         {/* RIGHT SIDE - Desktop */}
         <div className="hidden md:flex items-center gap-4">
           {/* Notifications */}
-          <button className="relative p-2 hover:bg-[#FFF7E5] rounded-full transition">
-            <Bell className="w-5 h-5 text-[#2F2F2F]" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-          </button>
+          <button
+  onClick={() => navigate("/notifications")}
+  className="relative p-2 hover:bg-[#FFF7E5] rounded-full transition"
+>
+  <Bell className="w-5 h-5 text-[#2F2F2F]" />
+  {unreadCount > 0 && (
+    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+      {unreadCount}
+    </span>
+  )}
+</button>
+
 
           {/* User Dropdown */}
           <div className="relative">

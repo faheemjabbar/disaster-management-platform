@@ -103,19 +103,21 @@ export const getPublicProfile = asyncHandler(async (req, res) => {
 // @route PUT /api/profile/image
 // @access Private
 export const updateProfileImage = asyncHandler(async (req, res) => {
-  const { profileImage } = req.body;
-
-  if (!profileImage) {
+  if (!req.file) {
     res.status(400);
-    throw new Error("Profile image URL is required");
+    throw new Error("No image file uploaded");
   }
 
   const user = await User.findById(req.user.id);
-  user.profileImage = profileImage;
+  user.profileImage = `/uploads/${req.file.filename}`;
   await user.save();
 
-  res.json({ message: "Profile image updated", profileImage });
+  res.json({
+    message: "Profile image uploaded successfully",
+    profileImage: user.profileImage,
+  });
 });
+
 
 // @desc Get volunteer statistics
 // @route GET /api/profile/stats/volunteer

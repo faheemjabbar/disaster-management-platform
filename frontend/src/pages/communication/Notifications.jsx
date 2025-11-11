@@ -1,56 +1,71 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Bell, Check, Trash2, AlertCircle, Info, CheckCircle } from "lucide-react";
+import { api } from "../../utils/apiEndpoints";
+import LoadingSpinner from "../../components/LoadingSpinner";
+import toast from "react-hot-toast";
 
 const Notifications = () => {
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: "success",
-      title: "Application Accepted",
-      message: "Your application for Flood Relief campaign has been accepted!",
-      time: "2 hours ago",
-      read: false,
-    },
-    {
-      id: 2,
-      type: "info",
-      title: "New Campaign Available",
-      message: "Earthquake Recovery Support needs volunteers in your area.",
-      time: "5 hours ago",
-      read: false,
-    },
-    {
-      id: 3,
-      type: "warning",
-      title: "Campaign Starting Soon",
-      message: "Your campaign starts tomorrow. Please review details.",
-      time: "1 day ago",
-      read: true,
-    },
-  ]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  const markAsRead = (id) => {
-    setNotifications(notifications.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const data = await api.notifications.getAll();
+      setNotifications(data.notifications || []);
+      setUnreadCount(data.unreadCount || 0);
+    } catch (err) {
+      toast.error("Failed to load notifications");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const deleteNotification = (id) => {
-    setNotifications(notifications.filter((n) => n.id !== id));
+  const markAsRead = async (id) => {
+    try {
+      await api.notifications.markRead(id);
+      setNotifications(notifications.map((n) => 
+        n._id === id ? { ...n, isRead: true } : n
+      ));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      toast.error("Failed to mark as read");
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, read: true })));
+  const deleteNotification = async (id) => {
+    try {
+      await api.notifications.delete(id);
+      setNotifications(notifications.filter((n) => n._id !== id));
+      toast.success("Notification deleted");
+    } catch (err) {
+      toast.error("Failed to delete notification");
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      await api.notifications.markAllRead();
+      setNotifications(notifications.map((n) => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+      toast.success("All marked as read");
+    } catch (err) {
+      toast.error("Failed to mark all as read");
+    }
   };
 
   const getIcon = (type) => {
-    switch (type) {
-      case "success":
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case "warning":
-        return <AlertCircle className="w-5 h-5 text-yellow-500" />;
-      default:
-        return <Info className="w-5 h-5 text-blue-500" />;
-    }
+    if (type.includes("approved")) return <CheckCircle className="w-5 h-5 text-green-500" />;
+    if (type.includes("rejected")) return <AlertCircle className="w-5 h-5 text-red-500" />;
+    return <Info className="w-5 h-5 text-blue-500" />;
   };
+
+  if (loading) return <LoadingSpinner fullScreen />;
 
   return (
     <section className="min-h-screen bg-gradient-to-br from-[#FFF7E5] to-[#FFEFD0] py-16 px-6">
@@ -58,53 +73,68 @@ const Notifications = () => {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-[#2F2F2F] flex items-center gap-3">
             <Bell className="w-8 h-8 text-[#F68B84]" />
-            Notifications
+            Notifications {unreadCount > 0 && (
+              <span className="bg-red-500 text-white text-sm px-2 py-1 rounded-full">
+                {unreadCount}
+              </span>
+            )}
           </h1>
-          <button
-            onClick={markAllAsRead}
-            className="text-[#E27872] hover:underline text-sm font-medium"
-          >
-            Mark all as read
-          </button>
+          {notifications.length > 0 && (
+            <button
+              onClick={markAllAsRead}
+              className="text-[#E27872] hover:underline text-sm font-medium"
+            >
+              Mark all as read
+            </button>
+          )}
         </div>
 
-        <div className="space-y-3">
-          {notifications.map((notif) => (
-            <div
-              key={notif.id}
-              className={`bg-white rounded-xl p-5 shadow-sm border-l-4 ${
-                notif.read ? "border-gray-300" : "border-[#F68B84]"
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                <div className="mt-1">{getIcon(notif.type)}</div>
-                <div className="flex-1">
-                  <h3 className="font-bold text-gray-900">{notif.title}</h3>
-                  <p className="text-gray-600 text-sm mt-1">{notif.message}</p>
-                  <p className="text-gray-400 text-xs mt-2">{notif.time}</p>
-                </div>
-                <div className="flex gap-2">
-                  {!notif.read && (
+        {notifications.length === 0 ? (
+          <div className="text-center py-20 text-gray-600">
+            <Bell className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+            <p>No notifications yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {notifications.map((notif) => (
+              <div
+                key={notif._id}
+                className={`bg-white rounded-xl p-5 shadow-sm border-l-4 ${
+                  notif.isRead ? "border-gray-300" : "border-[#F68B84]"
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className="mt-1">{getIcon(notif.type)}</div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-gray-900">{notif.title}</h3>
+                    <p className="text-gray-600 text-sm mt-1">{notif.message}</p>
+                    <p className="text-gray-400 text-xs mt-2">
+                      {new Date(notif.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {!notif.isRead && (
+                      <button
+                        onClick={() => markAsRead(notif._id)}
+                        className="p-2 hover:bg-green-50 rounded-lg transition"
+                        title="Mark as read"
+                      >
+                        <Check className="w-4 h-4 text-green-600" />
+                      </button>
+                    )}
                     <button
-                      onClick={() => markAsRead(notif.id)}
-                      className="p-2 hover:bg-green-50 rounded-lg transition"
-                      title="Mark as read"
+                      onClick={() => deleteNotification(notif._id)}
+                      className="p-2 hover:bg-red-50 rounded-lg transition"
+                      title="Delete"
                     >
-                      <Check className="w-4 h-4 text-green-600" />
+                      <Trash2 className="w-4 h-4 text-red-600" />
                     </button>
-                  )}
-                  <button
-                    onClick={() => deleteNotification(notif.id)}
-                    className="p-2 hover:bg-red-50 rounded-lg transition"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

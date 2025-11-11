@@ -2,68 +2,59 @@ import React, { useState, useEffect } from "react";
 import { Search, Filter, MapPin, List, ChevronLeft, ChevronRight } from "lucide-react";
 import CampaignCard from "../campaigns/CampaignCard";
 import MapView from "./MapView";
+import LoadingSpinner from "../../components/LoadingSpinner";
+import { api } from "../../utils/apiEndpoints";
+import toast from "react-hot-toast";
 
 const ExplorePage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [urgencyFilter, setUrgencyFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [campaigns, setCampaigns] = useState([]);
   const [filteredCampaigns, setFilteredCampaigns] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const [currentPage, setCurrentPage] = useState(1);
   const campaignsPerPage = 6;
 
-  const campaigns = [
-    {
-      id: 1,
-      title: "Flood Relief Drive - Sindh",
-      ngoName: "Pakistan Red Crescent",
-      location: "Dadu, Sindh",
-      disasterType: "Medical Aid",
-      urgency: "critical",
-      volunteersNeeded: 50,
-      volunteersJoined: 25,
-      description: "Join our flood relief drive...",
-      categories: ["Medical Aid", "Food Distribution"],
-      image: "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=800",
-      coordinates: { lat: 26.7312, lng: 67.7829 },
-    },
-    {
-      id: 2,
-      title: "Earthquake Recovery Support",
-      ngoName: "Al-Khidmat Foundation",
-      location: "Mirpur, AJK",
-      disasterType: "Construction",
-      urgency: "high",
-      volunteersNeeded: 40,
-      volunteersJoined: 18,
-      description: "Assist in rebuilding efforts...",
-      categories: ["Construction", "Counseling"],
-      image: "https://images.unsplash.com/photo-1547683905-f686c993aae5?w=800",
-      coordinates: { lat: 33.148, lng: 73.751 },
-    },
-    {
-      id: 3,
-      title: "Winter Relief Campaign",
-      ngoName: "Edhi Foundation",
-      location: "Quetta, Balochistan",
-      disasterType: "Logistics",
-      urgency: "medium",
-      volunteersNeeded: 25,
-      volunteersJoined: 20,
-      description: "Distribute warm clothes...",
-      categories: ["Distribution", "Logistics"],
-      image: "https://images.unsplash.com/photo-1548690596-f0ea2b4d46d4?w=800",
-      coordinates: { lat: 30.1798, lng: 66.975 },
-    },
-  ];
+  // Fetch campaigns from API on component mount
+  useEffect(() => {
+    fetchCampaigns();
+  }, []);
 
+  const fetchCampaigns = async () => {
+    try {
+      setLoading(true);
+      const params = { status: "active" };
+      
+      const data = await api.campaigns.getAll(params);
+      
+      // Transform the data to match your component's expected structure
+      const transformed = data.map(c => ({
+        ...c,
+        id: c._id,
+        ngoName: c.ngo?.organizationName || c.ngo?.fullName,
+        disasterType: c.disasterType || c.category,
+      }));
+      
+      setCampaigns(transformed);
+      setFilteredCampaigns(transformed);
+    } catch (err) {
+      toast.error("Failed to load campaigns");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Apply filters whenever search, urgency, or category changes
   useEffect(() => {
     const filtered = campaigns.filter((c) => {
       const matchesSearch =
-        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.location.toLowerCase().includes(searchQuery.toLowerCase());
+        c.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.location?.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesUrgency = urgencyFilter === "all" || c.urgency === urgencyFilter;
 
@@ -74,7 +65,7 @@ const ExplorePage = () => {
 
     setFilteredCampaigns(filtered);
     setCurrentPage(1);
-  }, [searchQuery, urgencyFilter, selectedCategory]);
+  }, [searchQuery, urgencyFilter, selectedCategory, campaigns]);
 
   const indexOfLast = currentPage * campaignsPerPage;
   const indexOfFirst = indexOfLast - campaignsPerPage;
@@ -88,6 +79,8 @@ const ExplorePage = () => {
   const prevPage = () => {
     if (currentPage > 1) setCurrentPage((prev) => prev - 1);
   };
+
+  if (loading) return <LoadingSpinner fullScreen />;
 
   return (
     <section className="min-h-screen bg-gradient-to-br from-[#FFF7E5] to-[#FFEFD0] py-16 px-6 md:px-12 backdrop-blur">
@@ -122,24 +115,25 @@ const ExplorePage = () => {
 
         {/* SEARCH BAR SECTION */}
         <div className="flex flex-col items-center gap-4 mb-10">
-
           <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-3 text-gray-400" /> <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F6A6A1] focus:outline-none" />
-
-
+            <Search className="absolute left-3 top-3 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by title or location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F6A6A1] focus:outline-none"
+            />
           </div>
-
         </div>
 
         {/* FILTER POPUP MODAL */}
         {showFilters && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg">
-
               <h2 className="text-xl font-semibold mb-5 text-gray-800 text-center">Filter Campaigns</h2>
 
               <div className="flex flex-col gap-6">
-
                 {/* Urgency */}
                 <div>
                   <p className="font-medium text-gray-700 mb-2">Urgency</p>
@@ -177,7 +171,6 @@ const ExplorePage = () => {
                     ))}
                   </div>
                 </div>
-
               </div>
 
               <div className="flex justify-end gap-3 mt-8">

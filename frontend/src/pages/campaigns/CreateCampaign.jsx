@@ -1,8 +1,16 @@
-import React, { useState } from "react";
-import { MapPin, Users, Upload } from "lucide-react";
+import React, { useState, useContext } from "react";
+import { useNavigate } from "react-router-dom";
+import { MapPin, Users, Upload, Loader } from "lucide-react";
 import { motion } from "framer-motion";
+import { AuthContext } from "../../context/AuthContext";
+import { api } from "../../utils/apiEndpoints";
+import toast from "react-hot-toast";
 
 const CreateCampaign = () => {
+  const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
+  const [loading, setLoading] = useState(false);
+  
   const [formData, setFormData] = useState({
     title: "",
     disasterType: "",
@@ -13,29 +21,147 @@ const CreateCampaign = () => {
     endDate: "",
     urgency: "medium",
     categories: "",
-    image: null,
+    image: "",
   });
 
   const [preview, setPreview] = useState(null);
+  const [errors, setErrors] = useState({});
+
+  // Check if user is NGO
+  React.useEffect(() => {
+    if (!user) {
+      toast.error("Please login first");
+      navigate("/");
+      return;
+    }
+    if (user.userType !== "ngo") {
+      toast.error("Only NGOs can create campaigns");
+      navigate("/");
+      return;
+    }
+  }, [user, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
+    // Clear error for this field
+    if (errors[name]) {
+      setErrors({ ...errors, [name]: "" });
+    }
   };
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setFormData({ ...formData, image: file });
-      setPreview(URL.createObjectURL(file));
+      // Check file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size should be less than 5MB");
+        return;
+      }
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreview(reader.result);
+        setFormData({ ...formData, image: reader.result });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = (e) => {
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.title || formData.title.trim().length < 5) {
+      newErrors.title = "Title must be at least 5 characters";
+    }
+
+    if (!formData.description || formData.description.trim().length < 20) {
+      newErrors.description = "Description must be at least 20 characters";
+    }
+
+    if (!formData.disasterType) {
+      newErrors.disasterType = "Please select a disaster type";
+    }
+
+    if (!formData.location || formData.location.trim().length < 3) {
+      newErrors.location = "Please enter a valid location";
+    }
+
+    if (!formData.volunteersNeeded || formData.volunteersNeeded < 1) {
+      newErrors.volunteersNeeded = "At least 1 volunteer is required";
+    }
+
+    if (!formData.startDate) {
+      newErrors.startDate = "Start date is required";
+    }
+
+    if (!formData.endDate) {
+      newErrors.endDate = "End date is required";
+    }
+
+    if (formData.startDate && formData.endDate) {
+      const start = new Date(formData.startDate);
+      const end = new Date(formData.endDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (start < today) {
+        newErrors.startDate = "Start date cannot be in the past";
+      }
+
+      if (end <= start) {
+        newErrors.endDate = "End date must be after start date";
+      }
+    }
+
+    return newErrors;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("📦 Campaign Data:", formData);
-    alert("Campaign Created (frontend only)");
-    // 🔒 TODO: Add API integration later
+
+    // Validate form
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      // Show first error
+      const firstError = Object.values(validationErrors)[0];
+      toast.error(firstError);
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Prepare campaign data
+      const campaignData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        disasterType: formData.disasterType,
+        location: formData.location.trim(),
+        volunteersNeeded: parseInt(formData.volunteersNeeded),
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        urgency: formData.urgency,
+        categories: formData.categories
+          .split(",")
+          .map((c) => c.trim())
+          .filter((c) => c.length > 0),
+        image: formData.image || "",
+      };
+
+      // Create campaign via API
+      await api.campaigns.create(campaignData);
+
+      toast.success("Campaign created successfully!");
+      navigate("/campaigns");
+    } catch (err) {
+      console.error("Failed to create campaign:", err);
+      toast.error(err.message || "Failed to create campaign");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -54,8 +180,7 @@ const CreateCampaign = () => {
           {/* Campaign Title */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              
-              Campaign Title
+              Campaign Title *
             </label>
             <input
               type="text"
@@ -64,22 +189,27 @@ const CreateCampaign = () => {
               onChange={handleChange}
               required
               placeholder="e.g. Flood Relief in Sindh"
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#F6A6A1] focus:outline-none"
+              className={`w-full border rounded-lg px-4 py-2 focus:ring-2 focus:outline-none ${
+                errors.title ? "border-red-500 focus:ring-red-200" : "border-gray-300 focus:ring-[#F6A6A1]"
+              }`}
             />
+            {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
           </div>
 
           {/* Disaster Type & Urgency */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Disaster Type
+                Disaster Type *
               </label>
               <select
                 name="disasterType"
                 value={formData.disasterType}
                 onChange={handleChange}
                 required
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-white focus:ring-2 focus:ring-[#F6A6A1] focus:outline-none"
+                className={`w-full border rounded-lg px-4 py-2 bg-white focus:ring-2 focus:outline-none ${
+                  errors.disasterType ? "border-red-500 focus:ring-red-200" : "border-gray-300 focus:ring-[#F6A6A1]"
+                }`}
               >
                 <option value="">Select Type</option>
                 <option value="Flood">Flood</option>
@@ -87,12 +217,16 @@ const CreateCampaign = () => {
                 <option value="Fire">Fire</option>
                 <option value="Drought">Drought</option>
                 <option value="Cold Wave">Cold Wave</option>
+                <option value="Cyclone">Cyclone</option>
+                <option value="Landslide">Landslide</option>
+                <option value="Tsunami">Tsunami</option>
               </select>
+              {errors.disasterType && <p className="text-red-500 text-xs mt-1">{errors.disasterType}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Urgency Level
+                Urgency Level *
               </label>
               <select
                 name="urgency"
@@ -100,10 +234,10 @@ const CreateCampaign = () => {
                 onChange={handleChange}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-white focus:ring-2 focus:ring-[#F8D57E] focus:outline-none"
               >
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
                 <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
               </select>
             </div>
           </div>
@@ -111,8 +245,7 @@ const CreateCampaign = () => {
           {/* Description */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              
-            Description
+              Description *
             </label>
             <textarea
               name="description"
@@ -120,9 +253,12 @@ const CreateCampaign = () => {
               onChange={handleChange}
               required
               rows="4"
-              placeholder="Describe your campaign’s purpose, needs, and goals..."
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#F6A6A1] focus:outline-none resize-none"
+              placeholder="Describe your campaign's purpose, needs, and goals..."
+              className={`w-full border rounded-lg px-4 py-2 focus:ring-2 focus:outline-none resize-none ${
+                errors.description ? "border-red-500 focus:ring-red-200" : "border-gray-300 focus:ring-[#F6A6A1]"
+              }`}
             ></textarea>
+            {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
           </div>
 
           {/* Location & Volunteers */}
@@ -130,7 +266,7 @@ const CreateCampaign = () => {
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 <MapPin className="inline w-4 h-4 mr-2 text-[#F68B84]" />
-                Location
+                Location *
               </label>
               <input
                 type="text"
@@ -139,14 +275,17 @@ const CreateCampaign = () => {
                 onChange={handleChange}
                 required
                 placeholder="e.g. Karachi, Sindh"
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#F6A6A1] focus:outline-none"
+                className={`w-full border rounded-lg px-4 py-2 focus:ring-2 focus:outline-none ${
+                  errors.location ? "border-red-500 focus:ring-red-200" : "border-gray-300 focus:ring-[#F6A6A1]"
+                }`}
               />
+              {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 <Users className="inline w-4 h-4 mr-2 text-[#F68B84]" />
-                Volunteers Needed
+                Volunteers Needed *
               </label>
               <input
                 type="number"
@@ -156,8 +295,11 @@ const CreateCampaign = () => {
                 required
                 min="1"
                 placeholder="e.g. 50"
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#F8D57E] focus:outline-none"
+                className={`w-full border rounded-lg px-4 py-2 focus:ring-2 focus:outline-none ${
+                  errors.volunteersNeeded ? "border-red-500 focus:ring-red-200" : "border-gray-300 focus:ring-[#F8D57E]"
+                }`}
               />
+              {errors.volunteersNeeded && <p className="text-red-500 text-xs mt-1">{errors.volunteersNeeded}</p>}
             </div>
           </div>
 
@@ -165,8 +307,7 @@ const CreateCampaign = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                
-                Start Date
+                Start Date *
               </label>
               <input
                 type="date"
@@ -174,13 +315,17 @@ const CreateCampaign = () => {
                 value={formData.startDate}
                 onChange={handleChange}
                 required
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#F8D57E] focus:outline-none"
+                min={new Date().toISOString().split('T')[0]}
+                className={`w-full border rounded-lg px-4 py-2 focus:ring-2 focus:outline-none ${
+                  errors.startDate ? "border-red-500 focus:ring-red-200" : "border-gray-300 focus:ring-[#F8D57E]"
+                }`}
               />
+              {errors.startDate && <p className="text-red-500 text-xs mt-1">{errors.startDate}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                End Date
+                End Date *
               </label>
               <input
                 type="date"
@@ -188,8 +333,12 @@ const CreateCampaign = () => {
                 value={formData.endDate}
                 onChange={handleChange}
                 required
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#F8D57E] focus:outline-none"
+                min={formData.startDate || new Date().toISOString().split('T')[0]}
+                className={`w-full border rounded-lg px-4 py-2 focus:ring-2 focus:outline-none ${
+                  errors.endDate ? "border-red-500 focus:ring-red-200" : "border-gray-300 focus:ring-[#F8D57E]"
+                }`}
               />
+              {errors.endDate && <p className="text-red-500 text-xs mt-1">{errors.endDate}</p>}
             </div>
           </div>
 
@@ -206,13 +355,14 @@ const CreateCampaign = () => {
               placeholder="e.g. Medical Aid, Food, Shelter"
               className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#F6A6A1] focus:outline-none"
             />
+            <p className="text-xs text-gray-500 mt-1">Separate categories with commas</p>
           </div>
 
           {/* Image Upload */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               <Upload className="inline w-4 h-4 mr-2 text-[#F68B84]" />
-              Upload Campaign Image
+              Campaign Image (Optional)
             </label>
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <input
@@ -229,14 +379,23 @@ const CreateCampaign = () => {
                 />
               )}
             </div>
+            <p className="text-xs text-gray-500 mt-1">Max size: 5MB. Supported: JPG, PNG, GIF</p>
           </div>
 
           {/* Submit */}
           <button
             type="submit"
-            className="w-full bg-[#F68B84] text-white font-semibold py-3 rounded-lg hover:bg-[#E27872] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+            disabled={loading}
+            className="w-full bg-[#F68B84] text-white font-semibold py-3 rounded-lg hover:bg-[#E27872] transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Create Campaign
+            {loading ? (
+              <>
+                <Loader className="w-5 h-5 animate-spin" />
+                Creating Campaign...
+              </>
+            ) : (
+              'Create Campaign'
+            )}
           </button>
         </form>
       </motion.div>
